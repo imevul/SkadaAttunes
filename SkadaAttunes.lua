@@ -45,7 +45,7 @@ local function getInProgressAttunes(force)
 	return inProgress
 end
 
-function table.containsProperty(tbl, property, value)
+local function tableContainsProperty(tbl, property, value)
 	for _, data in pairs(tbl) do
 		if data[property] == value then
 			return true
@@ -92,7 +92,7 @@ local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 		end
 		
 		for id, _ in pairs(player.attunes) do
-			if not table.containsProperty(inProgress, "id", id) then
+			if not tableContainsProperty(inProgress, "id", id) then
 				player.attunes[id] = nil
 				player.numAttunes = player.numAttunes - 1
 
