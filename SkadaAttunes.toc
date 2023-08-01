@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Skada |r[|caaedc99fAttunes|r]
+## Notes: Adds attunement tracking to Skada
+## Author: Imevul
+## Version: 1.0
+## Dependencies: Skada
+
+SkadaAttunes.lua

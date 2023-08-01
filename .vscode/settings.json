@@ -1,0 +1,12 @@
+{
+    "Lua.diagnostics.globals": [
+        "Skada",
+        "GetItemInfo",
+        "ItemAttuneHas",
+        "LibStub",
+        "DEFAULT_CHAT_FRAME",
+        "time",
+        "UnitGUID",
+        "UnitName"
+    ]
+}
