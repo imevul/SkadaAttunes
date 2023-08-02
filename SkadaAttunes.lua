@@ -2,10 +2,15 @@ local L = LibStub("AceLocale-3.0"):GetLocale("Skada", false)
 
 --"any" locale shortcut
 L["Attunements"] = "Attunements"
+L["Display"] = "Display"
+L["Refresh frequency"] = "Refresh frequency"
+L["Trigger events"] = "Trigger events"
 L["Cache attunements"] = "Cache attunements"
-L["Use timer (5s)"] = "Use timer (5s)"
+L["Use timer"] = "Use timer"
+L["Timer frequency"] = "Timer frequency"
 L["Use kill events"] = "Use kill events"
 L["Use damage events"] = "Use damage events"
+L["Show item level"] = "Show item level"
 L["Server attunement variables not loaded"] = "Server attunement variables not loaded"
 
 local Skada = Skada
@@ -18,7 +23,8 @@ end
 local serverCheck = false
 local cache_inProgress = {}
 local updateTimer = nil
-local updateTimerSeconds = 5
+local updateTimerValue = 0
+
 
 local function getInProgressAttunes(force)
 	if not ItemAttuneHas then
@@ -61,18 +67,40 @@ local function addOrUpdatePlayerAttune(player, id, progress)
 		player.attunes = {}
 	end
 
+	local name, link, _, itemLevel, _, _, _, _, _, icon = GetItemInfo(id)
+
+	if not itemLevel then
+		itemLevel = 0
+	end
+
+	if not name then
+		name = "Unknown item (" .. id .. ")"
+	end
+
+	if not icon then
+		icon = GetItemIcon(id)
+	end
+
+	if Skada.db.profile.modules.attuneshowitemlevel then
+		name = "[" .. itemLevel .. "] " .. name
+	end
+
 	-- Add spell to player if it does not exist.
 	if not player.attunes[id] then
 		player.attunes[id] = {
 			id = id,
-			name = select(1, GetItemInfo(id)),
-			icon = select(10, GetItemInfo(id)),
-			progress = progress
+			name = name,
+			icon = icon,
+			progress = progress,
+			link = link
 		}
-		
+
 		-- Add to player total damage.
 		player.numAttunes = player.numAttunes + 1
 	else
+		player.attunes[id].name = name
+		player.attunes[id].icon = icon
+		player.attunes[id].link = link
 		player.attunes[id].progress = progress
 	end
 end
@@ -109,8 +137,6 @@ end
 local attuneProgressEvent = {}
 
 local function OnAttuneProgress(timestamp, eventtype, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
-	--attuneProgressEvent.playerId = srcGUID
-	--attuneProgressEvent.playerName = srcName
 	attuneProgressEvent.playerId = UnitGUID("player")
 	attuneProgressEvent.playerName = UnitName("player")
 
@@ -146,10 +172,34 @@ local function OnTimerTick()
 		return
 	end
 
+	-- Tick the timer more often, and manually count the ticks
+	if updateTimerValue <= 0 then
+		updateTimerValue = Skada.db.profile.modules.attunetimerfrequency
+	else
+		updateTimerValue = updateTimerValue - 1
+		return
+	end
+
 	-- Force cache update
 	getInProgressAttunes(true)
 	OnAttuneProgress()
 	Skada:UpdateDisplay(true)
+end
+
+--#region MOD
+local function mod_tooltip(win, id, _, tooltip)
+	local player = Skada:find_player(win:get_selected_set(), UnitGUID("player"))
+	if player then
+		local attune = player.attunes[id]
+		if attune then
+			local link = attune.link
+			if not link then
+				link = "item:" .. id
+			end
+
+			tooltip:SetHyperlink(link)
+		end
+	end
 end
 
 function mod:Update(win,set)
@@ -161,7 +211,7 @@ function mod:Update(win,set)
 		if player.numAttunes > 0 then
 			for id, attune in pairs(player.attunes) do
 				if not tmp[id] then
-					tmp[id] = {id = attune.id, progress = attune.progress, name = attune.name, icon = attune.icon}
+					tmp[id] = {id = attune.id, progress = attune.progress, name = attune.name, icon = attune.icon, link = attune.link}
 				else
 					tmp[id].progress = attune.progress
 				end
@@ -189,10 +239,11 @@ function mod:Update(win,set)
 	win.metadata.maxvalue = 100
 end
 
-function mod:OnEnable()
-	mod.metadata	= {}
 
-	updateTimer = Skada:ScheduleRepeatingTimer(OnTimerTick, updateTimerSeconds)
+function mod:OnEnable()
+	mod.metadata	= {tooltip = mod_tooltip}
+
+	updateTimer = Skada:ScheduleRepeatingTimer(OnTimerTick, 1)
 
 	Skada:RegisterForCL(OnAttuneProgress, 'PLAYER_XP_UPDATE', {src_is_interesting = true})
 
@@ -249,48 +300,99 @@ end
 function mod:GetSetSummary(set)
 	return set.numAttunes
 end
+--#endregion MOD
 
+--#region OPTIONS
 local opts = {
 	ccoptions = {
-		type="group",
-		name=L["Attunements"],
-		args={
-
-			usecache = {
-				type = "toggle",
-				name = L["Cache attunements"],
-				get = function() return Skada.db.profile.modules.attunescache end,
-				set = function()
-					Skada.db.profile.modules.attunescache = not Skada.db.profile.modules.attunescache
-					if Skada.db.profile.modules.attunescache then
-						Skada.db.profile.modules.attunesusetimer = true
-					end
-				end,
-				order=1
+		type = "group",
+		name = L["Attunements"],
+		args = {
+			display = {
+				type = "group",
+				name = L["Display"],
+				inline = true,
+				order = 1,
+				args = {
+					showitemlevel = {
+						type = "toggle",
+						name = L["Show item level"],
+						get = function() return Skada.db.profile.modules.attuneshowitemlevel end,
+						set = function() Skada.db.profile.modules.attuneshowitemlevel = not Skada.db.profile.modules.attuneshowitemlevel end,
+						order = 1
+					},
+				},
 			},
 
-			usetimer = {
-				type = "toggle",
-				name = L["Use timer (5s)"],
-				get = function() return Skada.db.profile.modules.attunesusetimer end,
-				set = function() Skada.db.profile.modules.attunesusetimer = not Skada.db.profile.modules.attunesusetimer end,
-				order=1
-			},
-			
-			usekillevents = {
-				type = "toggle",
-				name = L["Use kill events"],
-				get = function() return Skada.db.profile.modules.attunesusekillevents end,
-				set = function() Skada.db.profile.modules.attunesusekillevents = not Skada.db.profile.modules.attunesusekillevents end,
-				order=1
+			refreshfrequency = {
+				type = "group",
+				name = L["Refresh frequency"],
+				inline = true,
+				order = 2,
+				args = {
+					usecache = {
+						type = "toggle",
+						name = L["Cache attunements"],
+						get = function() return Skada.db.profile.modules.attunescache end,
+						set = function()
+							Skada.db.profile.modules.attunescache = not Skada.db.profile.modules.attunescache
+							if Skada.db.profile.modules.attunescache then
+								Skada.db.profile.modules.attunesusetimer = true
+							end
+						end,
+						order = 1
+					},
+
+					usetimer = {
+						type = "toggle",
+						name = L["Use timer"],
+						get = function() return Skada.db.profile.modules.attunesusetimer end,
+						set = function()
+							Skada.db.profile.modules.attunesusetimer = not Skada.db.profile.modules.attunesusetimer
+							if not Skada.db.profile.modules.attunesusetimer then
+								Skada.db.profile.modules.attunescache = false
+							end
+						end,
+						order = 2
+					},
+
+					timerfrequency = {
+						type = "range",
+						name = L["Timer frequency"],
+						min = 1,
+						max = 15,
+						step = 1,
+						get = function() return Skada.db.profile.modules.attunetimerfrequency end,
+						set = function(_, val)
+							Skada.db.profile.modules.attunetimerfrequency = val
+						end,
+						order = 3
+					},
+				},
 			},
 
-			usedamageevents = {
-				type = "toggle",
-				name = L["Use damage events"],
-				get = function() return Skada.db.profile.modules.attunesusedamageevents end,
-				set = function() Skada.db.profile.modules.attunesusedamageevents = not Skada.db.profile.modules.attunesusedamageevents end,
-				order=1
+			triggerevents = {
+				type = "group",
+				name = L["Trigger events"],
+				inline = true,
+				order = 3,
+				args = {
+					usekillevents = {
+						type = "toggle",
+						name = L["Use kill events"],
+						get = function() return Skada.db.profile.modules.attunesusekillevents end,
+						set = function() Skada.db.profile.modules.attunesusekillevents = not Skada.db.profile.modules.attunesusekillevents end,
+						order = 1
+					},
+
+					usedamageevents = {
+						type = "toggle",
+						name = L["Use damage events"],
+						get = function() return Skada.db.profile.modules.attunesusedamageevents end,
+						set = function() Skada.db.profile.modules.attunesusedamageevents = not Skada.db.profile.modules.attunesusedamageevents end,
+						order = 2
+					},
+				},
 			},
 		},
 	}
@@ -309,6 +411,10 @@ function mod:OnInitialize()
 		Skada.db.profile.modules.attunesusetimer = true
 	end
 
+	if Skada.db.profile.modules.attunetimerfrequency == nil then
+		Skada.db.profile.modules.attunetimerfrequency = 5
+	end
+
 	if Skada.db.profile.modules.attunesusekillevents == nil then
 		Skada.db.profile.modules.attunesusekillevents = true
 	end
@@ -316,4 +422,9 @@ function mod:OnInitialize()
 	if Skada.db.profile.modules.attunesusedamageevents == nil then
 		Skada.db.profile.modules.attunesusedamageevents = true
 	end
+
+	if Skada.db.profile.modules.attuneshowitemlevel == nil then
+		Skada.db.profile.modules.attuneshowitemlevel = true
+	end
 end
+--#endregion OPTIONS
