@@ -131,12 +131,21 @@ local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 		end
 		
 		set.numAttunes = player.numAttunes
+		Skada:UpdateDisplay(true)
 	end
 end
 
+local lastTimestamp = 0
 local attuneProgressEvent = {}
 
 local function OnAttuneProgress(timestamp, eventtype, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
+	if timestamp then
+		if lastTimestamp + 1 > timestamp then
+			return
+		end
+		lastTimestamp = timestamp
+	end
+
 	attuneProgressEvent.playerId = UnitGUID("player")
 	attuneProgressEvent.playerName = UnitName("player")
 
