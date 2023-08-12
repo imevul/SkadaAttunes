@@ -86,47 +86,64 @@ local function tableContainsProperty(tbl, property, value)
 	return false
 end
 
+local function removePlayerAttune(player, id)
+	if not player.numAttunes then
+		player.numAttunes = 0
+		player.attunes = {}
+	else
+		if player.attunes[id] then
+			player.attunes[id] = nil
+
+			player.numAttunes = player.numAttunes - 1
+
+			player.numAttunes = math.max(0, player.numAttunes)
+		end
+	end
+end
+
 local function addOrUpdatePlayerAttune(player, id, progress)
 	if not player.numAttunes then
 		player.numAttunes = 0
 		player.attunes = {}
 	end
 
-	local name, link, _, itemLevel, _, _, _, _, _, icon = GetItemInfo(id)
+	if progress < 100 then
+		local name, link, _, itemLevel, _, _, _, _, _, icon = GetItemInfo(id)
 
-	if not itemLevel then
-		itemLevel = 0
-	end
+		if not itemLevel then
+			itemLevel = 0
+		end
 
-	if not name then
-		name = "Unknown item (" .. id .. ")"
-	end
+		if not name then
+			name = "Unknown item (" .. id .. ")"
+		end
 
-	if not icon then
-		icon = GetItemIcon(id)
-	end
+		if not icon then
+			icon = GetItemIcon(id)
+		end
 
-	if Skada.db.profile.modules.attuneshowitemlevel then
-		name = "[" .. itemLevel .. "] " .. name
-	end
+		if Skada.db.profile.modules.attuneshowitemlevel then
+			name = "[" .. itemLevel .. "] " .. name
+		end
 
-	-- Add spell to player if it does not exist.
-	if not player.attunes[id] then
-		player.attunes[id] = {
-			id = id,
-			name = name,
-			icon = icon,
-			progress = progress,
-			link = link
-		}
+		if not player.attunes[id] then
+			player.attunes[id] = {
+				id = id,
+				name = name,
+				icon = icon,
+				progress = progress,
+				link = link
+			}
 
-		-- Add to player total damage.
-		player.numAttunes = player.numAttunes + 1
+			player.numAttunes = player.numAttunes + 1
+		else
+			player.attunes[id].name = name
+			player.attunes[id].icon = icon
+			player.attunes[id].link = link
+			player.attunes[id].progress = progress
+		end
 	else
-		player.attunes[id].name = name
-		player.attunes[id].icon = icon
-		player.attunes[id].link = link
-		player.attunes[id].progress = progress
+		removePlayerAttune(player, id)
 	end
 end
 
@@ -146,12 +163,7 @@ local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 
 		for id, _ in pairs(player.attunes) do
 			if not tableContainsProperty(inProgress, "id", id) then
-				player.attunes[id] = nil
-				player.numAttunes = player.numAttunes - 1
-
-				if player.numAttunes < 0 then
-					player.numAttunes = 0
-				end
+				removePlayerAttune(player, id)
 			end
 		end
 
@@ -238,7 +250,7 @@ end
 
 function SkadaAttunes:Update(win,set)
 	local max = 0
-	
+
 	-- Aggregate the data.
 	local tmp = {}
 	for i, player in ipairs(set.players) do
@@ -252,7 +264,7 @@ function SkadaAttunes:Update(win,set)
 			end
 		end
 	end
-	
+
 	local nr = 1
 	for id, attune in pairs(tmp) do
 		local d = win.dataset[nr] or {}
@@ -263,7 +275,7 @@ function SkadaAttunes:Update(win,set)
 		d.valuetext = ("%02.1f%%"):format(attune.progress)
 		d.id = id
 		d.icon = attune.icon
-		
+
 		if attune.progress > max then
 			max = attune.progress
 		end
@@ -324,7 +336,7 @@ end
 function SkadaAttunes:AddSetAttributes(set)
 	if not set.numAttunes then
 		set.numAttunes = 0
-		
+
 		local inProgress = getInProgressAttunes()
 		-- Also add to set total damage taken.
 		set.numAttunes = #inProgress
