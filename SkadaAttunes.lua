@@ -14,7 +14,7 @@ L["Show item level"] = "Show item level"
 L["Server attunement variables not loaded"] = "Server attunement variables not loaded"
 
 local Skada = Skada
-local mod = Skada:NewModule(L["Attunements"])
+SkadaAttunes = Skada:NewModule(L["Attunements"])
 
 local function chat(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
@@ -25,6 +25,31 @@ local cache_inProgress = {}
 local updateTimer = nil
 local updateTimerValue = 0
 
+function SkadaAttunes.addToBlockList(itemId)
+	if not Skada.db.profile.modules.attuneblocklist then
+		Skada.db.profile.modules.attuneblocklist = {}
+	end
+
+	Skada.db.profile.modules.attuneblocklist[itemId] = true
+	chat(tostring(itemId) .. " added to blocklist")
+end
+
+function SkadaAttunes.removeFromBlockList(itemId)
+	if not Skada.db.profile.modules.attuneblocklist then
+		Skada.db.profile.modules.attuneblocklist = {}
+	end
+
+	Skada.db.profile.modules.attuneblocklist[itemId] = nil
+	chat(tostring(itemId) .. " removed from blocklist")
+end
+
+function SkadaAttunes.isInBlockList(itemId)
+	if not Skada.db.profile.modules.attuneblocklist then
+		Skada.db.profile.modules.attuneblocklist = {}
+	end
+
+	return Skada.db.profile.modules.attuneblocklist[itemId] or false
+end
 
 local function getInProgressAttunes(force)
 	if not ItemAttuneHas then
@@ -42,7 +67,7 @@ local function getInProgressAttunes(force)
 	local inProgress = {}
 	for id, progress in pairs(ItemAttuneHas) do
 		-- Only attunements with some progress
-		if progress > 0 and progress < 100 then
+		if progress > 0 and progress < 100 and not SkadaAttunes.isInBlockList(id) then
 			table.insert(inProgress, {id = id, progress = progress})
 		end
 	end
@@ -114,11 +139,11 @@ local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 	local player = Skada:get_player(set, attuneEvent.playerId, attuneEvent.playerName)
 	if player then
 		local inProgress = getInProgressAttunes(forceRefresh)
-		
+
 		for _, attune in ipairs(inProgress) do
 			addOrUpdatePlayerAttune(player, attune.id, attune.progress)
 		end
-		
+
 		for id, _ in pairs(player.attunes) do
 			if not tableContainsProperty(inProgress, "id", id) then
 				player.attunes[id] = nil
@@ -129,7 +154,7 @@ local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 				end
 			end
 		end
-		
+
 		set.numAttunes = player.numAttunes
 		Skada:UpdateDisplay(true)
 	end
@@ -171,7 +196,7 @@ local function OnAttuneProgress(timestamp, eventtype, srcGUID, srcName, srcFlags
 			return
 		end
 	end
-	
+
 	updateAttuneProgress(Skada.current, attuneProgressEvent, forceRefresh)
 	updateAttuneProgress(Skada.total, attuneProgressEvent, forceRefresh)
 end
@@ -211,7 +236,7 @@ local function mod_tooltip(win, id, _, tooltip)
 	end
 end
 
-function mod:Update(win,set)
+function SkadaAttunes:Update(win,set)
 	local max = 0
 	
 	-- Aggregate the data.
@@ -249,8 +274,8 @@ function mod:Update(win,set)
 end
 
 
-function mod:OnEnable()
-	mod.metadata	= {tooltip = mod_tooltip}
+function SkadaAttunes:OnEnable()
+	SkadaAttunes.metadata	= {tooltip = mod_tooltip}
 
 	updateTimer = Skada:ScheduleRepeatingTimer(OnTimerTick, 1)
 
@@ -272,7 +297,7 @@ function mod:OnEnable()
 	Skada:AddMode(self)
 end
 
-function mod:OnDisable()
+function SkadaAttunes:OnDisable()
 	if updateTimer then
 		Skada:CancelTimer(updateTimer)
 		updateTimer = nil
@@ -282,7 +307,7 @@ function mod:OnDisable()
 end
 
 -- Called by Skada when a new player is added to a set.
-function mod:AddPlayerAttributes(player)
+function SkadaAttunes:AddPlayerAttributes(player)
 	if not player.numAttunes then
 		player.numAttunes = 0
 		player.attunes = {}
@@ -296,7 +321,7 @@ function mod:AddPlayerAttributes(player)
 end
 
 -- Called by Skada when a new set is created.
-function mod:AddSetAttributes(set)
+function SkadaAttunes:AddSetAttributes(set)
 	if not set.numAttunes then
 		set.numAttunes = 0
 		
@@ -306,7 +331,7 @@ function mod:AddSetAttributes(set)
 	end
 end
 
-function mod:GetSetSummary(set)
+function SkadaAttunes:GetSetSummary(set)
 	return set.numAttunes
 end
 --#endregion MOD
@@ -407,7 +432,7 @@ local opts = {
 	}
 }
 
-function mod:OnInitialize()
+function SkadaAttunes:OnInitialize()
 	-- Add our options.
 	table.insert(Skada.options.plugins, opts)
 
@@ -434,6 +459,10 @@ function mod:OnInitialize()
 
 	if Skada.db.profile.modules.attuneshowitemlevel == nil then
 		Skada.db.profile.modules.attuneshowitemlevel = true
+	end
+
+	if Skada.db.profile.modules.attuneblocklist == nil then
+		Skada.db.profile.modules.attuneblocklist = {}
 	end
 end
 --#endregion OPTIONS
