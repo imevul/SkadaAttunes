@@ -2,6 +2,10 @@
 
 A Skada module for tracking attunements
 
+## Dependencies
+
+- Skada
+
 ## Installation
 
 Requires Skada.
