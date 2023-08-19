@@ -157,6 +157,10 @@ end
 local function get_player(set, playerId, playerName)
 	for _, player in ipairs(set.players) do
 		if player.id == playerId then
+			if not player.first then
+				player.first = time()
+			end
+
 			return player
 		end
 	end
