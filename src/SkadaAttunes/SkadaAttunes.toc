@@ -2,7 +2,7 @@
 ## Title: Skada |r[|caaedc99fAttunes|r]
 ## Notes: Adds attunement tracking to Skada
 ## Author: Imevul
-## Version: 1.0.3
+## Version: 1.0.4
 ## Dependencies: Skada
 
 SkadaAttunes.lua

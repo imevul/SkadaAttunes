@@ -11,10 +11,11 @@ L["Timer frequency"] = "Timer frequency"
 L["Use kill events"] = "Use kill events"
 L["Use damage events"] = "Use damage events"
 L["Show item level"] = "Show item level"
+L["Show item id"] = "Show item id"
 L["Server attunement variables not loaded"] = "Server attunement variables not loaded"
 
 local Skada = Skada
-SkadaAttunes = Skada:NewModule(L["Attunements"])
+SkadaAttunes = Skada:NewModule(L["Attunements"], "AceTimer-3.0")
 
 local function chat(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
@@ -109,13 +110,15 @@ local function addOrUpdatePlayerAttune(player, id, progress)
 
 	if progress < 100 then
 		local name, link, _, itemLevel, _, _, _, _, _, icon = GetItemInfo(id)
+		local unknown = false
 
 		if not itemLevel then
 			itemLevel = 0
 		end
 
 		if not name then
-			name = "Unknown item (" .. id .. ")"
+			unknown = true
+			name = "Unknown item"
 		end
 
 		if not icon then
@@ -124,6 +127,10 @@ local function addOrUpdatePlayerAttune(player, id, progress)
 
 		if Skada.db.profile.modules.attuneshowitemlevel then
 			name = "[" .. itemLevel .. "] " .. name
+		end
+
+		if unknown or Skada.db.profile.modules.attuneshowitemid then
+			name = name .. ' (' .. id .. ')'
 		end
 
 		if not player.attunes[id] then
@@ -147,28 +154,43 @@ local function addOrUpdatePlayerAttune(player, id, progress)
 	end
 end
 
+local function get_player(set, playerId, playerName)
+	for _, player in ipairs(set.players) do
+		if player.id == playerId then
+			return player
+		end
+	end
+
+	return Skada:get_player(set, playerId, playerName)
+end
+
 local function updateAttuneProgress(set, attuneEvent, forceRefresh)
 	if not set then
 		return
 	end
 
 	-- Get the player.
-	local player = Skada:get_player(set, attuneEvent.playerId, attuneEvent.playerName)
+	local player = get_player(set, attuneEvent.playerId, attuneEvent.playerName)
 	if player then
+		local changed = false
 		local inProgress = getInProgressAttunes(forceRefresh)
 
 		for _, attune in ipairs(inProgress) do
-			addOrUpdatePlayerAttune(player, attune.id, attune.progress)
+			changed = addOrUpdatePlayerAttune(player, attune.id, attune.progress) or changed
 		end
 
 		for id, _ in pairs(player.attunes) do
 			if not tableContainsProperty(inProgress, "id", id) then
 				removePlayerAttune(player, id)
+				changed = true
 			end
 		end
 
-		set.numAttunes = player.numAttunes
-		Skada:UpdateDisplay(true)
+		if changed then
+			player.last = time()
+			set.numAttunes = player.numAttunes
+			Skada:UpdateDisplay(true)
+		end
 	end
 end
 
@@ -185,12 +207,6 @@ local function OnAttuneProgress(timestamp, eventtype, srcGUID, srcName, srcFlags
 
 	attuneProgressEvent.playerId = UnitGUID("player")
 	attuneProgressEvent.playerName = UnitName("player")
-
-	-- Create new set if not exists
-	if not Skada.total then
-		Skada.total = {players = {}, name = L["Total"], starttime = time(), ["time"] = 0, last_action = time()}
-		Skada.db.profile.total = Skada.total
-	end
 
 	local forceRefresh = false
 	if eventtype == 'PLAYER_XP_UPDATE' then
@@ -248,16 +264,24 @@ local function mod_tooltip(win, id, _, tooltip)
 	end
 end
 
-function SkadaAttunes:Update(win,set)
-	local max = 0
+function SkadaAttunes:Update(win, set)
+	-- Only update the total/current segments
+	if set ~= Skada.total and set ~= Skada.current then
+		return
+	end
+
+	win.metadata.maxvalue = 100
 
 	-- Aggregate the data.
 	local tmp = {}
-	for i, player in ipairs(set.players) do
+	for _, player in ipairs(set.players) do
 		if player.numAttunes > 0 then
 			for id, attune in pairs(player.attunes) do
 				if not tmp[id] then
-					tmp[id] = {id = attune.id, progress = attune.progress, name = attune.name, icon = attune.icon, link = attune.link}
+					-- Extra check to remove old attunes
+					if ItemAttuneHas[id] or 0 < 100 then
+						tmp[id] = {id = attune.id, progress = attune.progress, name = attune.name, icon = attune.icon, link = attune.link}
+					end
 				else
 					tmp[id].progress = attune.progress
 				end
@@ -276,20 +300,20 @@ function SkadaAttunes:Update(win,set)
 		d.id = id
 		d.icon = attune.icon
 
-		if attune.progress > max then
-			max = attune.progress
-		end
 		nr = nr + 1
 	end
 
-	win.metadata.maxvalue = 100
+	-- Clean up old stuff
+--[[ 	for i = nr, #win.dataset, 1 do
+		win.dataset[i].id = nil
+	end ]]
 end
 
 
 function SkadaAttunes:OnEnable()
-	SkadaAttunes.metadata	= {tooltip = mod_tooltip}
+	SkadaAttunes.metadata	= {tooltip = mod_tooltip, wipestale = 1}
 
-	updateTimer = Skada:ScheduleRepeatingTimer(OnTimerTick, 1)
+	updateTimer = self:ScheduleRepeatingTimer(OnTimerTick, 1)
 
 	Skada:RegisterForCL(OnAttuneProgress, 'PLAYER_XP_UPDATE', {src_is_interesting = true})
 
@@ -338,7 +362,6 @@ function SkadaAttunes:AddSetAttributes(set)
 		set.numAttunes = 0
 
 		local inProgress = getInProgressAttunes()
-		-- Also add to set total damage taken.
 		set.numAttunes = #inProgress
 	end
 end
@@ -366,6 +389,14 @@ local opts = {
 						get = function() return Skada.db.profile.modules.attuneshowitemlevel end,
 						set = function() Skada.db.profile.modules.attuneshowitemlevel = not Skada.db.profile.modules.attuneshowitemlevel end,
 						order = 1
+					},
+
+					showitemid = {
+						type = "toggle",
+						name = L["Show item id"],
+						get = function() return Skada.db.profile.modules.attuneshowitemid end,
+						set = function() Skada.db.profile.modules.attuneshowitemid = not Skada.db.profile.modules.attuneshowitemid end,
+						order = 2
 					},
 				},
 			},
@@ -471,6 +502,10 @@ function SkadaAttunes:OnInitialize()
 
 	if Skada.db.profile.modules.attuneshowitemlevel == nil then
 		Skada.db.profile.modules.attuneshowitemlevel = true
+	end
+
+	if Skada.db.profile.modules.attuneshowitemid == nil then
+		Skada.db.profile.modules.attuneshowitemid = false
 	end
 
 	if Skada.db.profile.modules.attuneblocklist == nil then
