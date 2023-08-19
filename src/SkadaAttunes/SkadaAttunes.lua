@@ -161,6 +161,10 @@ local function get_player(set, playerId, playerName)
 				player.first = time()
 			end
 
+			if not player.last then
+				player.last = time()
+			end
+
 			return player
 		end
 	end
