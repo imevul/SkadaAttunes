@@ -52,12 +52,21 @@ function SkadaAttunes.isInBlockList(itemId)
 	return Skada.db.profile.modules.attuneblocklist[itemId] or false
 end
 
+local function checkServer()
+	if ItemAttuneHas then
+		return true
+	end
+
+	if not serverCheck then
+		chat(L["Server attunement variables not loaded"])
+		serverCheck = true
+	end
+
+	return false
+end
+
 local function getInProgressAttunes(force)
-	if not ItemAttuneHas then
-		if not serverCheck then
-			chat(L["Server attunement variables not loaded"])
-			serverCheck = true
-		end
+	if not checkServer() then
 		return {}
 	end
 
@@ -275,6 +284,10 @@ end
 function SkadaAttunes:Update(win, set)
 	-- Only update the total/current segments
 	if set ~= Skada.total and set ~= Skada.current then
+		return
+	end
+
+	if not checkServer() then
 		return
 	end
 
